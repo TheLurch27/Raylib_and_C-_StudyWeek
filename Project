@@ -1,0 +1,278 @@
+#include "raylib.h"
+#include <vector>
+#include <array>
+#include <algorithm>
+#include <random>
+#include <ctime>
+
+const int GRID_WIDTH = 10;
+const int GRID_HEIGHT = 20;
+const int BLOCK_SIZE = 30;
+const int SCREEN_WIDTH = GRID_WIDTH * BLOCK_SIZE;
+const int SCREEN_HEIGHT = GRID_HEIGHT * BLOCK_SIZE;
+
+std::array<std::array<int, 4>, 4> shapes[5] =
+{
+    // I-Form
+    {{
+        {1, 1, 1, 1},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    }},
+    // O-Form
+    {{
+        {1, 1, 0, 0},
+        {1, 1, 0, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    }},
+    // T-Form
+    {{
+        {0, 1, 0, 0},
+        {1, 1, 1, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    }},
+    // L-Form
+    {{
+        {1, 0, 0, 0},
+        {1, 0, 0, 0},
+        {1, 1, 0, 0},
+        {0, 0, 0, 0}
+    }},
+    // Z-Form
+    {{
+        {1, 1, 0, 0},
+        {0, 1, 1, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    }}
+};
+
+struct Tetromino {
+    std::array<std::array<int, 4>, 4> shape;
+    int x, y;
+    Color color;
+};
+
+Color tetrominoColors[5] = { BLUE, RED, PURPLE, ORANGE, GREEN };
+
+std::vector<std::vector<Color>> grid(GRID_HEIGHT, std::vector<Color>(GRID_WIDTH, BLANK));
+
+bool gameOver = false;
+
+Tetromino CreateRandomTetromino()
+{
+    std::default_random_engine rng(static_cast<unsigned int>(std::time(0)));
+    std::uniform_int_distribution<int> dist(0, 4);
+
+    int shapeIndex = dist(rng);
+    Tetromino tetromino = { shapes[shapeIndex], 3, 0, tetrominoColors[shapeIndex] };
+    return tetromino;
+}
+
+bool CheckCollision(Tetromino& tetromino)
+{
+    for (int row = 0; row < 4; row++)
+    {
+        for (int col = 0; col < 4; col++)
+        {
+            if (tetromino.shape[row][col] == 1)
+            {
+                int newX = tetromino.x + col;
+                int newY = tetromino.y + row;
+                if (newX < 0 || newX >= GRID_WIDTH || newY >= GRID_HEIGHT || grid[newY][newX].a != 0)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void RotateTetromino(Tetromino& tetromino)
+{
+    Tetromino rotated = tetromino;
+    for (int row = 0; row < 4; row++)
+    {
+        for (int col = 0; col < 4; col++)
+        {
+            rotated.shape[row][col] = tetromino.shape[3 - col][row];
+        }
+    }
+    if (!CheckCollision(rotated))
+    {
+        tetromino = rotated;
+    }
+}
+
+void PlaceTetromino(Tetromino& tetromino)
+{
+    for (int row = 0; row < 4; row++)
+    {
+        for (int col = 0; col < 4; col++)
+        {
+            if (tetromino.shape[row][col] == 1)
+            {
+                grid[tetromino.y + row][tetromino.x + col] = tetromino.color;
+            }
+        }
+    }
+}
+
+void ClearFullRows()
+{
+    for (int row = GRID_HEIGHT - 1; row >= 0; row--)
+    {
+        bool isFull = true;
+        for (int col = 0; col < GRID_WIDTH; col++)
+        {
+            if (grid[row][col].a == 0)
+            {
+                isFull = false;
+                break;
+            }
+        }
+        if (isFull)
+        {
+            for (int r = row; r > 0; r--) {
+                grid[r] = grid[r - 1];
+            }
+            grid[0] = std::vector<Color>(GRID_WIDTH, BLANK);
+            row++;
+        }
+    }
+}
+
+void DrawGrid() {
+    for (int row = 0; row < GRID_HEIGHT; row++)
+    {
+        for (int col = 0; col < GRID_WIDTH; col++)
+        {
+            Color color = grid[row][col];
+            if (color.a != 0)
+            {
+                DrawRectangle(col * BLOCK_SIZE, row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, color);
+            }
+            DrawRectangleLines(col * BLOCK_SIZE, row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, DARKGRAY);
+        }
+    }
+}
+
+void DrawTetromino(const Tetromino& tetromino)
+{
+    for (int row = 0; row < 4; row++)
+    {
+        for (int col = 0; col < 4; col++)
+        {
+            if (tetromino.shape[row][col] == 1)
+            {
+                int x = (tetromino.x + col) * BLOCK_SIZE;
+                int y = (tetromino.y + row) * BLOCK_SIZE;
+                DrawRectangle(x, y, BLOCK_SIZE, BLOCK_SIZE, tetromino.color);
+                DrawRectangleLines(x, y, BLOCK_SIZE, BLOCK_SIZE, DARKGRAY);
+            }
+        }
+    }
+}
+
+void DrawLoosingScreen()
+{
+    DrawText("Game Over!", SCREEN_WIDTH / 2 - 70, SCREEN_HEIGHT / 2 - 20, 40, RED);
+    DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 50, 200, 40, LIGHTGRAY);
+    DrawText("Restart", SCREEN_WIDTH / 2 - 45, SCREEN_HEIGHT / 2 + 60, 20, BLACK);
+
+    DrawRectangle(SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 110, 200, 40, LIGHTGRAY);
+    DrawText("Exit Game", SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 + 120, 20, BLACK);
+}
+
+int main()
+{
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tetris");
+    SetTargetFPS(60);
+
+    Tetromino tetromino = CreateRandomTetromino();
+    float fallTime = 0;
+    float fallSpeed = 0.5f;
+
+    while (!WindowShouldClose())
+    {
+        if (gameOver)
+        {
+            
+            BeginDrawing();
+            ClearBackground(BLACK);
+            DrawLoosingScreen();
+
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+            {
+                Vector2 mouse = GetMousePosition();
+                if (mouse.x > SCREEN_WIDTH / 2 - 100 && mouse.x < SCREEN_WIDTH / 2 + 100)
+                {
+                    if (mouse.y > SCREEN_HEIGHT / 2 + 50 && mouse.y < SCREEN_HEIGHT / 2 + 90)
+                    {
+                        grid = std::vector<std::vector<Color>>(GRID_HEIGHT, std::vector<Color>(GRID_WIDTH, BLANK));
+                        tetromino = CreateRandomTetromino();
+                        gameOver = false;
+                    }
+                    if (mouse.y > SCREEN_HEIGHT / 2 + 110 && mouse.y < SCREEN_HEIGHT / 2 + 150)
+                    {
+                        CloseWindow();
+                    }
+                }
+            }
+
+            EndDrawing();
+            continue;
+        }
+
+        if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT)) {
+            tetromino.x--;
+            if (CheckCollision(tetromino)) tetromino.x++;
+        }
+        if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) {
+            tetromino.x++;
+            if (CheckCollision(tetromino)) tetromino.x--;
+        }
+        if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) {
+            fallSpeed = 0.1f;
+        }
+
+        if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) {
+            RotateTetromino(tetromino);
+        }
+
+        fallTime += GetFrameTime();
+        if (fallTime >= fallSpeed) {
+            fallTime = 0;
+            fallSpeed = 0.5f;
+
+            tetromino.y++;
+            if (CheckCollision(tetromino)) {
+                tetromino.y--;
+                PlaceTetromino(tetromino);
+
+                if (tetromino.y <= 0) {
+                    gameOver = true;
+                }
+                else {
+                    ClearFullRows();
+                    tetromino = CreateRandomTetromino();
+                }
+            }
+        }
+
+        BeginDrawing();
+        ClearBackground(BLACK);
+
+        DrawGrid();
+        DrawTetromino(tetromino);
+
+        EndDrawing();
+    }
+
+    CloseWindow();
+    return 0;
+}
